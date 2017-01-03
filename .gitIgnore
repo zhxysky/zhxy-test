@@ -1,2 +1,4 @@
 .idea
-zhxy-test.iml
+*.iml
+target/
+/target/
