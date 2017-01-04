@@ -6,6 +6,7 @@ import redis.clients.jedis.Response;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 
 /**
@@ -34,6 +35,8 @@ public class PipeLineTest {
 
         jedis.select(8);
         jedis.flushDB();
+
+        Random random = new Random();
 
         //set data with pipeLine
         Pipeline pipeline = jedis.pipelined();
