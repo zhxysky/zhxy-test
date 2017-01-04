@@ -11,8 +11,9 @@ import java.util.Set;
 /**
  * Created by zhxy on 1/3/2017.
  */
-public class PipeLineTest {
+public class UserTest {
     public static void main(String[] args) {
+
         System.out.println("test start....");
 
         Jedis jedis = new Jedis("127.0.0.1",6379,40000000);
@@ -21,11 +22,13 @@ public class PipeLineTest {
         jedis.select(8);
         jedis.flushDB();
         long start = System.currentTimeMillis();
+        User user ;
         //set data
         for(int i=0;i<10000;i++) {
-            data.clear();
-            data.put("k_" + i, "v_" + i);
-            jedis.hmset("key_" + i, data);
+            user = new User(i,"zhxy_"+i,i);
+            jedis.hset("user_" + i, "id", user.getId()+"");
+            jedis.hset("user_" + i, "name", user.getName());
+            jedis.hset("user_" + i, "age", user.getAge()+"");
         }
         long end = System.currentTimeMillis();
 
@@ -39,9 +42,10 @@ public class PipeLineTest {
         Pipeline pipeline = jedis.pipelined();
         start = System.currentTimeMillis();
         for(int i=0;i<10000;i++) {
-            data.clear();
-            data.put("k_" + i, "v_" + i);
-            pipeline.hmset("key_" + i, data);
+            user = new User(i,"zhxy_"+i,i);
+            pipeline.hset("user_" + i, "id", user.getId()+"");
+            pipeline.hset("user_" + i, "name", user.getName());
+            pipeline.hset("user_" + i, "age", user.getAge()+"");
         }
 
         pipeline.sync();
@@ -54,20 +58,20 @@ public class PipeLineTest {
         //get data
         Set keys = jedis.keys("*");
         start = System.currentTimeMillis();
-        Map<String, Map<String, String>> result = new HashMap<String, Map<String, String>>();
+        Map<String, String> result = new HashMap<String, String>();
         for (Object key : keys) {
-            result.put((String) key, jedis.hgetAll((String) key));
+            result.put((String) key, jedis.hget((String) key,"id"));
         }
         end = System.currentTimeMillis();
         System.out.println("result size:[" + result.size() + "]");
         System.out.println("hgetall without pipeline used [" + (end - start) + "] ms");
 
         //get data with pipeline
-        Map<String, Response<Map<String, String>>> responses = new HashMap<String, Response<Map<String, String>>>(keys.size());
+        Map<String, Response<String>> responses = new HashMap<String, Response<String>>(keys.size());
         result.clear();
         start = System.currentTimeMillis();
         for (Object key : keys) {
-            responses.put((String) key, pipeline.hgetAll((String) key));
+            responses.put((String) key, pipeline.hget((String) key, "id"));
         }
         pipeline.sync();
         for (String k : responses.keySet()) {
@@ -77,6 +81,12 @@ public class PipeLineTest {
         System.out.println("result size:[" + result.size() + "]");
         System.out.println("hgetall with pipeline used [" + (end - start) + "] ms");
 
+        int count = 0 ;
+        for( String k : result.keySet()) {
+            System.out.println(k +"\t"+result.get(k));
+            count ++;
+        }
+        System.out.println("count:"+count);
         jedis.disconnect();
 
     }
