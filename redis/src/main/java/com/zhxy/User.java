@@ -1,6 +1,8 @@
 package com.zhxy;
 
 import java.io.Serializable;
+import java.lang.reflect.Field;
+import java.util.HashMap;
 
 /**
  * Created by zhxy on 1/3/2017.
@@ -11,6 +13,8 @@ public class User implements Serializable {
     private int age;
 
     private String school;
+
+    public User(){}
 
     public User(int id, String name, int age) {
         this.id = id;
@@ -58,5 +62,20 @@ public class User implements Serializable {
                 ", age=" + age +
                 ", school='" + school + '\'' +
                 '}';
+    }
+
+    public HashMap<String,String> toMap(){
+        HashMap<String,String> map = new HashMap<>();
+        Field[] fields = this.getClass().getDeclaredFields();
+        for(Field field : fields) {
+            try {
+                if(field.get(this) != null) {
+                    map.put(field.getName().toString(), field.get(this).toString()); // 设置字段的名称为key，值为value
+                }
+            } catch (IllegalAccessException e) {
+                e.printStackTrace();
+            }
+        }
+        return map;
     }
 }
