@@ -13,12 +13,13 @@
     <!-- Jedis ConnectionFactory 默认连接池 -->
     <bean id="jedisConnectionFactory" class="org.springframework.data.redis.connection.jedis.JedisConnectionFactory" p:hostName="${redis.ip}" p:port="${redis.port}" p:usePool="true"  />
 
-    <bean id="stringRedisSerializer" class="org.springframework.data.redis.serializer.StringRedisSerializer" />
+    <!--<bean id="stringRedisSerializer" class="org.springframework.data.redis.serializer.StringRedisSerializer" />-->
+    <!--<bean id="jdkSerializationRedisSerializer" class="org.springframework.data.redis.serializer.JdkSerializationRedisSerializer" />-->
     <bean id="redisTemplate" class="org.springframework.data.redis.core.RedisTemplate" p:connectionFactory-ref="jedisConnectionFactory" p:enableDefaultSerializer="true" >
         <!--<property name="stringSerializer"  ref="stringRedisSerializer" />-->
-        <property name="keySerializer"  ref="stringRedisSerializer" />
+        <!--<property name="keySerializer"  ref="stringRedisSerializer" />-->
         <!--<property name="hashKeySerializer"  ref="stringRedisSerializer" />-->
-        <!--<property name="valueSerializer"  ref="stringRedisSerializer" />-->
+        <!--<property name="valueSerializer"  ref="jdkSerializationRedisSerializer" />-->
     </bean>
     <!--<bean id="stringRedisTemplate" class="org.springframework.data.redis.core.StringRedisTemplate" p:connectionFactory-ref="jedisConnectionFactory" p:enableDefaultSerializer="true" />-->
 
@@ -26,3 +27,6 @@
     <!--<bean id="lettuceConnectionFactory" class="org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory" p:hostName="${redis.ip}" p:port="${redis.port}" p:shareNativeConnection="false" />-->
 
 </beans>
+
+
+
