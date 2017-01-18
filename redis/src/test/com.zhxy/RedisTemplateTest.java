@@ -9,6 +9,7 @@ import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.test.context.ContextConfiguration;
@@ -176,6 +177,7 @@ public class RedisTemplateTest {
         User user1 =  new User(1, "zhxy", 18);
         User user2 =  new User(2, "zhxy2", 19);
         User user3 =  new User(3, "zhxy2", 20);
+        User user4 =  new User(4, "zhxy2", 20);
 
         redisTemplate.opsForList().leftPush("list1",user1);
         redisTemplate.opsForList().leftPush("list1", user2);
@@ -186,17 +188,143 @@ public class RedisTemplateTest {
         System.out.println(JSON.toJSONString(user));
 
         redisTemplate.opsForList().leftPush("list1", user1, user3);
+        User[] users = new User[5];
+
         List<User> list = new ArrayList<>();
-        for(int i=10;i<15;i++) {
-            list.add(new User(i, "zhxy" + i, i));
+        for(int i=0;i<5;i++) {
+            User u = new User(i, "zhxy" + i, i);
+            list.add(u);
+            users[i] = u;
+        }
+        redisTemplate.opsForList().leftPushAll("list1", Arrays.asList(user1,user2,user3));
+        redisTemplate.opsForList().leftPushAll("list1", Arrays.asList(user3,user2,user1));
+        redisTemplate.opsForList().leftPushIfPresent("list1", user4);
+        redisTemplate.opsForList().leftPushIfPresent("list2", user3); //如果key存在，则插入
+        List<Object> valueList = redisTemplate.opsForList().range("list1", 0, 5);
+        System.out.println(valueList);
+        redisTemplate.opsForList().remove("list1", 0, user1);
+        redisTemplate.opsForList().remove("list1", 0, user2);
+        redisTemplate.opsForList().remove("list1", 1, user3);
+//        redisTemplate.opsForList().remove("list1", -1, user4);
+//        redisTemplate.opsForList().remove("list1", 0, user3);
+//        redisTemplate.opsForList().remove("list1", 0, user4);
+        redisTemplate.opsForList().trim("list1",0,2);
+
+//        redisTemplate.opsForList().leftPushAll("list1", list.get(0),list.get(1),list.get(2));
+    }
+
+    @Test
+    public void testOpsForSet(){
+        redisTemplate.setKeySerializer(redisTemplate.getStringSerializer());
+        redisTemplate.setValueSerializer(redisTemplate.getStringSerializer());
+        Jackson2JsonRedisSerializer jackson2JsonRedisSerializer = new Jackson2JsonRedisSerializer<User>(User.class);
+        redisTemplate.setValueSerializer(jackson2JsonRedisSerializer);
+        User user1 =  new User(1, "zhxy", 18);
+        User user2 =  new User(2, "zhxy2", 19);
+        User user3 =  new User(3, "zhxy2", 20);
+        User user4 =  new User(4, "zhxy2", 20);
+
+        redisTemplate.opsForSet().add("set1", user1, user1, user2);
+        redisTemplate.opsForSet().add("set2", user1, user1, user2,user3,user4);
+        redisTemplate.opsForSet().add("set4", user1,user4);
+        Set<Object> difference = redisTemplate.opsForSet().difference("set1", "set2");
+        Set<Object> difference2 = redisTemplate.opsForSet().difference("set2", "set1");
+        System.out.println(difference);
+        System.out.println(difference2);
+        redisTemplate.opsForSet().differenceAndStore("set2", "set1", "set3");
+        Set<Object> distinct = redisTemplate.opsForSet().distinctRandomMembers("set2", 2); //随机获取不同的对象
+        System.out.println(distinct);
+        Set<Object> intersect = redisTemplate.opsForSet().intersect("set1", "set2");
+        System.out.println(intersect);
+        intersect = redisTemplate.opsForSet().intersect("set1", Arrays.asList("set2", "set4"));
+        System.out.println(intersect);
+        redisTemplate.opsForSet().intersectAndStore("set1","set2","set12intersect");
+        redisTemplate.opsForSet().intersectAndStore("set1",Arrays.asList("set2","set4"),"set124intersect");
+        Assert.assertEquals(true, redisTemplate.opsForSet().isMember("set1", user1));
+        Set<Object> members = redisTemplate.opsForSet().members("set1");
+        System.out.println(members);
+        redisTemplate.opsForSet().move("set2", user4, "set1");
+        Object obj = redisTemplate.opsForSet().pop("set1");
+        System.out.println(obj);
+        obj = redisTemplate.opsForSet().randomMember("set1");
+        System.out.println(obj);
+        List<Object> list = redisTemplate.opsForSet().randomMembers("set1", 3);
+        System.out.println(list);
+        redisTemplate.opsForSet().remove("set1", user4);
+        Cursor<Object> cursor = redisTemplate.opsForSet().scan("set2", null);
+        while(cursor.hasNext()) {
+            Object o = cursor.next();
+            System.out.println(o);
+        }
+        Assert.assertEquals(Long.valueOf(3),redisTemplate.opsForSet().size("set2"));
+
+        Set<Object> unionSet = redisTemplate.opsForSet().union("set1", "set2");
+        System.out.println(unionSet);
+        unionSet = redisTemplate.opsForSet().union("set1", Arrays.asList("set2", "set3"));
+        System.out.println(unionSet);
+        redisTemplate.opsForSet().unionAndStore("set1", "set2", "setunion12");
+        redisTemplate.opsForSet().unionAndStore("set1", Arrays.asList("set2","set4"), "setunion124");
+
+    }
+
+    @Test
+    public void testOpsForZSet() {
+        redisTemplate.setKeySerializer(redisTemplate.getStringSerializer());
+        redisTemplate.setValueSerializer(redisTemplate.getStringSerializer());
+        Jackson2JsonRedisSerializer jackson2JsonRedisSerializer = new Jackson2JsonRedisSerializer<User>(User.class);
+        redisTemplate.setValueSerializer(jackson2JsonRedisSerializer);
+        User user1 =  new User(1, "zhxy", 18);
+        User user2 =  new User(2, "zhxy2", 19);
+        User user3 =  new User(3, "zhxy2", 20);
+        User user4 =  new User(4, "zhxy2", 20);
+
+        redisTemplate.opsForZSet().add("zset1", user1, 1);
+        redisTemplate.opsForZSet().add("zset1", user2, 2);
+        redisTemplate.opsForZSet().add("zset1", user2, 3);
+        Assert.assertEquals(Long.valueOf(1),redisTemplate.opsForZSet().count("zset1", 0, 2));
+        redisTemplate.opsForZSet().incrementScore("zset1", user2, 3);
+
+        redisTemplate.opsForZSet().add("zset2", user1, 1);
+        redisTemplate.opsForZSet().add("zset2", user2, 2);
+        redisTemplate.opsForZSet().add("zset2", user3, 3);
+
+        redisTemplate.opsForZSet().add("zset3", user1, 1);
+
+        redisTemplate.opsForZSet().intersectAndStore("zset1", "zset2", "zsetinter12");
+        redisTemplate.opsForZSet().intersectAndStore("zset1", Arrays.asList("zset2","zset3"), "zsetinter123");
+
+        Set<Object> objectSet = redisTemplate.opsForZSet().range("zset1", 0, 2);
+        System.out.println(objectSet);
+
+        objectSet = redisTemplate.opsForZSet().rangeByScore("zset1", 0, 1);
+        System.out.println(objectSet);
+
+        System.out.println(redisTemplate.opsForZSet().rangeByScore("zset1",0,5,1,1));
+
+        Set<ZSetOperations.TypedTuple<Object>> withScoreSet = redisTemplate.opsForZSet().rangeByScoreWithScores("zset1", 0, 6);
+        for(ZSetOperations.TypedTuple<Object> obj : withScoreSet){
+            System.out.println(obj.getValue()+"\t"+obj.getScore());
         }
 
+        System.out.println(redisTemplate.opsForZSet().rank("zset1", user2));
 
-        redisTemplate.opsForList().leftPushAll("list1", Arrays.asList(list));
-//        redisTemplate.opsForList().leftPushAll("list1", list.get(0),list.get(1),list.get(2));
+        System.out.println(redisTemplate.opsForZSet().reverseRange("zset1",0,1));
 
-        Assert.assertEquals(Long.valueOf(5),redisTemplate.opsForList().size("list1"));
-//        redisTemplate.opsForList().leftPushIfPresent("list1", user3);
+        Cursor cursor = redisTemplate.opsForZSet().scan("zset2", null);
+        while (cursor.hasNext()) {
+            System.out.println(cursor.next());
+        }
+
+        System.out.println(redisTemplate.opsForZSet().score("zset1",user2));
+        System.out.println(redisTemplate.opsForZSet().size("zset1"));
+        System.out.println(redisTemplate.opsForZSet().zCard("zset1"));
+        redisTemplate.opsForZSet().unionAndStore("zset1", "zset2", "zsetunion12"); //score 会相加
+        redisTemplate.opsForZSet().unionAndStore("zset1", Arrays.asList("zset2", "zset3"), "zsetunion123");
+
+        System.out.println(redisTemplate.opsForZSet().remove("zset1",user1,user2));
+        System.out.println(redisTemplate.opsForZSet().removeRange("zset2",0,1));
+        System.out.println(redisTemplate.opsForZSet().removeRangeByScore("zsetunion12",0,3));
+
 
     }
 
