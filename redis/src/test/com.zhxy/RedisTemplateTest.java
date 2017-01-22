@@ -8,7 +8,9 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.RedisCallback;
+import org.springframework.data.redis.core.RedisOperations;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.SessionCallback;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializer;
@@ -32,6 +34,8 @@ public class RedisTemplateTest {
 
     @Autowired
     private RedisTemplate<Object,Object> redisTemplate;
+
+
 
     @Test
     public void testOpsForValue() {
@@ -132,6 +136,28 @@ public class RedisTemplateTest {
     }
 
     @Test
+    public void testTransaction() {
+        List<Object> txResults = redisTemplate.execute(new SessionCallback<List<Object>>() {
+            @Override
+            public List<Object> execute(RedisOperations redisOperations) throws DataAccessException {
+                redisOperations.multi();
+                redisOperations.opsForSet().add("key", "value1");
+                redisOperations.opsForSet().add("key", "value2");
+                return redisOperations.exec();
+            }
+        });
+        System.out.println("Number of items added to set : " + txResults.get(0));
+        Object result = redisTemplate.execute(new SessionCallback<Object>() {
+            @Override
+            public Object execute(RedisOperations redisOperations) throws DataAccessException {
+                return redisOperations.opsForSet().members("key");
+            }
+        });
+
+        System.out.println(result);
+    }
+
+    @Test
     public void testType() {
         redisTemplate.setKeySerializer(redisTemplate.getStringSerializer());
         redisTemplate.setValueSerializer(redisTemplate.getStringSerializer());
@@ -223,6 +249,8 @@ public class RedisTemplateTest {
         User user2 =  new User(2, "zhxy2", 19);
         User user3 =  new User(3, "zhxy2", 20);
         User user4 =  new User(4, "zhxy2", 20);
+
+
 
         redisTemplate.opsForSet().add("set1", user1, user1, user2);
         redisTemplate.opsForSet().add("set2", user1, user1, user2,user3,user4);
@@ -338,14 +366,14 @@ public class RedisTemplateTest {
             list.add(user);
         }
         long start = System.currentTimeMillis();
-        redisTemplate.execute(new RedisCallback<Object>() {
+        Object result = redisTemplate.execute(new RedisCallback<Object>() {
             @Override
             public Object doInRedis(RedisConnection redisConnection) throws DataAccessException {
                 redisConnection.flushDb();
                 RedisSerializer<String> stringSerializer = redisTemplate.getStringSerializer();
                 RedisSerializer<User> jdkSerializationRedisSerializer = (RedisSerializer<User>) redisTemplate.getValueSerializer();
                 for (User user : list) {
-                    redisConnection.set(stringSerializer.serialize(user.getName()),jdkSerializationRedisSerializer.serialize(user));
+                    redisConnection.set(stringSerializer.serialize(user.getName()), jdkSerializationRedisSerializer.serialize(user));
                 }
                 return null;
             }
@@ -376,43 +404,112 @@ public class RedisTemplateTest {
     @Test
     public void testUserUsePipeline() {
         List<User> list = new ArrayList<>();
+        Map<String, User> userMap = new HashMap<>();
+        List<String> keys = new ArrayList<>();
         for(int i=0;i<100;i++) {
             User user = new User(i, "zhxy-" + i, i);
             list.add(user);
+            userMap.put("hset" + i, user);
+            keys.add("hset" + i);
         }
         long start = System.currentTimeMillis();
 
-
-        redisTemplate.executePipelined(new RedisCallback<Object>() {
+        List<Object> result = redisTemplate.executePipelined(new RedisCallback<Object>() {
             @Override
             public Object doInRedis(RedisConnection redisConnection) throws DataAccessException {
                 redisConnection.flushDb();
                 RedisSerializer<String> stringSerializer = redisTemplate.getStringSerializer();
                 RedisSerializer<User> jdkSerializationRedisSerializer = (RedisSerializer<User>) redisTemplate.getValueSerializer();
-                for (User user : list) {
-                    redisConnection.rPush(stringSerializer.serialize("userlist"), jdkSerializationRedisSerializer.serialize(user));
+                for (Map.Entry<String,User> entry : userMap.entrySet()) {
+                    redisConnection.hSet(stringSerializer.serialize(entry.getKey()), stringSerializer.serialize("user"), stringSerializer.serialize(JSON.toJSONString(entry.getValue())));
                 }
+
                 return null;
             }
         });
 
-//        List<Object> userList = redisTemplate.opsForList().range(redisTemplate.getStringSerializer().serialize("userlist"), 0, 100);
+        System.out.println("result:"+result);
 
         List<Object> userList =  redisTemplate.executePipelined(new RedisCallback<Object>() {
                 @Override
                 public Object doInRedis(RedisConnection redisConnection) throws DataAccessException {
                     RedisSerializer<String> stringSerializer = redisTemplate.getStringSerializer();
-                    for(int i=0;i<100;i++) {
-                        redisConnection.lPop(stringSerializer.serialize("userlist"));
+                    for(String key : keys) {
+                        redisConnection.hGet(stringSerializer.serialize(key), stringSerializer.serialize("user"));
                     }
                     return null;
             }
-        });
+        },redisTemplate.getStringSerializer());
         for (Object user : userList) {
-            System.out.println(JSON.toJSONString(user));
+            System.out.println(JSON.toJSONString(JSON.parse((String)user)));
         }
         long end = System.currentTimeMillis();
         System.out.println("with pipeline user " + (end - start) +"ms");
+    }
+
+    @Test
+    public void testExec() {
+
+//        redisTemplate.setHashKeySerializer(redisTemplate.getStringSerializer());
+//        redisTemplate.setHashValueSerializer(redisTemplate.getStringSerializer());
+        redisTemplate.setKeySerializer(redisTemplate.getStringSerializer());
+        redisTemplate.setValueSerializer(redisTemplate.getStringSerializer());
+
+
+        redisTemplate.setEnableTransactionSupport(true);
+        redisTemplate.multi();
+        redisTemplate.boundListOps("execList").leftPush("123");
+        redisTemplate.boundListOps("execList").leftPush("234");
+        redisTemplate.boundListOps("execList").leftPush("345");
+//        List<Object> list = redisTemplate.exec();
+//        System.out.println(list);
+
+        List<Object> list  = redisTemplate.exec(redisTemplate.getStringSerializer());
+        System.out.println(list);
+    }
+
+    @Test
+    public void testExecute() {
+        Object result = redisTemplate.execute(new RedisCallback<Object>() {
+            @Override
+            public Object doInRedis(RedisConnection redisConnection) throws DataAccessException {
+                redisConnection.flushDb();
+                redisConnection.set(redisTemplate.getStringSerializer().serialize("key"), redisTemplate.getStringSerializer().serialize("value"));
+                Object obj = redisTemplate.getStringSerializer().deserialize(redisConnection.get(redisTemplate.getStringSerializer().serialize("key")));
+                return obj;
+            }
+        },true);
+
+        System.out.println(JSON.toJSONString(result));
+
+        long start = System.currentTimeMillis();
+        result = redisTemplate.execute(new RedisCallback<Object>() {
+            @Override
+            public Object doInRedis(RedisConnection redisConnection) throws DataAccessException {
+//                redisConnection.flushDb();
+                for(int i=0;i<1000;i++) {
+                    redisConnection.set(redisTemplate.getStringSerializer().serialize("keykey"+i),redisTemplate.getStringSerializer().serialize("valuevalue"+i));
+                }
+                return null;
+            }
+        },true,false);
+        long end = System.currentTimeMillis();
+        System.out.println("without pipeline cost : "+(end - start));
+
+        start = System.currentTimeMillis();
+        result = redisTemplate.execute(new RedisCallback<Object>() {
+            @Override
+            public Object doInRedis(RedisConnection redisConnection) throws DataAccessException {
+//                redisConnection.flushDb();
+                for(int i=0;i<1000;i++) {
+                    redisConnection.set(redisTemplate.getStringSerializer().serialize("key"+i),redisTemplate.getStringSerializer().serialize("value"+i));
+                }
+                return null;
+            }
+        },true,true);
+        end = System.currentTimeMillis();
+        System.out.println("with pipeline cost : "+(end - start));
+        System.out.println(result);
     }
 
 }
